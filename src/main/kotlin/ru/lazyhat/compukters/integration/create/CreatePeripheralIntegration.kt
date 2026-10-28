@@ -31,6 +31,7 @@ import com.simibubi.create.content.logistics.stockTicker.PackageOrder
 import com.simibubi.create.content.logistics.stockTicker.StockTickerBlockEntity
 import create.CreateAddonContract
 import create.CreateCapabilityHandler
+import create.FluidTankState
 import net.minecraft.core.BlockPos
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.server.level.ServerLevel
@@ -38,6 +39,7 @@ import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.phys.AABB
+import net.neoforged.neoforge.capabilities.Capabilities
 import ru.lazyhat.compukters.api.addon.AddonCallResult
 import ru.lazyhat.compukters.api.addon.addonCompleted
 import ru.lazyhat.compukters.api.addon.addonFailed
@@ -86,7 +88,7 @@ object CreatePeripheralIntegration {
 
                 override fun bounds(contact: CompuktersPeripheralContact): AABB? {
                     val tank = contact.level.getBlockEntity(contact.position) as? FluidTankBlockEntity ?: return null
-                    val controller = boilerController(contact.level, tank) ?: return null
+                    val controller = fluidTankController(contact.level, tank) ?: return null
                     return AABB(controller.blockPos).expandTowards(
                         (controller.width - 1).toDouble(),
                         (controller.height - 1).toDouble(),
@@ -129,8 +131,9 @@ object CreatePeripheralIntegration {
             }
 
             is FluidTankBlockEntity -> {
-                boilerController(contact.level, entity)?.let { controller ->
-                    CompuktersPeripheralDevice(controller.blockPos.immutable(), PeripheralKind.BOILER.deviceKey)
+                fluidTankController(contact.level, entity)?.let { controller ->
+                    val kind = if (controller.boiler.isActive) PeripheralKind.BOILER else PeripheralKind.FLUID_TANK
+                    CompuktersPeripheralDevice(controller.blockPos.immutable(), kind.deviceKey)
                 }
             }
 
@@ -256,12 +259,22 @@ object CreatePeripheralIntegration {
             }
 
             is FluidTankBlockEntity -> {
-                if (kind == PeripheralKind.BOILER) {
-                    boilerController(level, entity)?.let { controller ->
-                        BoilerEndpoint(level, position, entity, controller, reachable)
+                when (kind) {
+                    PeripheralKind.BOILER -> {
+                        boilerController(level, entity)?.let { controller ->
+                            BoilerEndpoint(level, position, entity, controller, reachable)
+                        }
                     }
-                } else {
-                    null
+
+                    PeripheralKind.FLUID_TANK -> {
+                        fluidTankController(level, entity)?.takeUnless { it.boiler.isActive }?.let { controller ->
+                            FluidTankEndpoint(level, controller.blockPos.immutable(), controller, reachable)
+                        }
+                    }
+
+                    else -> {
+                        null
+                    }
                 }
             }
 
@@ -367,6 +380,13 @@ internal class CreateHostState(
     override fun level(argument0: Int): AddonCallResult<Int> = withEndpoint<BoilerAccess, Int>(argument0) { it.level() }
 
     override fun isPassive(argument0: Int): AddonCallResult<Boolean> = withEndpoint<BoilerAccess, Boolean>(argument0) { it.isPassive() }
+
+    override fun fluidTankAcquire(argument0: Int): AddonCallResult<Int> = acquire(argument0, PeripheralKind.FLUID_TANK)
+
+    override fun fluidTankAcquireByName(argument0: String): AddonCallResult<Int> = acquireNamed(argument0, PeripheralKind.FLUID_TANK)
+
+    override fun fluidTankState(argument0: Int): AddonCallResult<FluidTankState> =
+        withEndpoint<FluidTankAccess, FluidTankState>(argument0) { it.state() }
 
     override fun snapshot(argument0: Int): AddonCallResult<Int> {
         val endpoint = endpoint<StockTickerAccess>(argument0) ?: return endpointFailure()
@@ -562,6 +582,7 @@ internal class CreateHostState(
                 RotationControllerAccess::class -> PeripheralKind.ROTATION_CONTROLLER
                 StockTickerAccess::class -> PeripheralKind.STOCK_TICKER
                 BoilerAccess::class -> PeripheralKind.BOILER
+                FluidTankAccess::class -> PeripheralKind.FLUID_TANK
                 PumpAccess::class -> PeripheralKind.PUMP
                 ClutchAccess::class -> PeripheralKind.CLUTCH
                 else -> error("Unknown Create endpoint contract")
@@ -612,6 +633,7 @@ internal class CreateHostState(
             when (endpoint) {
                 is StockTickerAccess -> STALE_STOCK_TICKER_DETAIL
                 is BoilerAccess -> STALE_BOILER_DETAIL
+                is FluidTankAccess -> "Create fluid tank was removed, reconfigured, disconnected, or unloaded"
                 else -> STALE_PERIPHERAL_DETAIL
             },
         )
@@ -668,6 +690,7 @@ internal enum class PeripheralKind {
     ROTATION_CONTROLLER,
     STOCK_TICKER,
     BOILER,
+    FLUID_TANK,
     PUMP,
     CLUTCH,
     ;
@@ -683,6 +706,7 @@ internal enum class PeripheralKind {
                 ROTATION_CONTROLLER -> "create.kinetics.RotationController"
                 STOCK_TICKER -> "create.logistics.StockTicker"
                 BOILER -> "create.boiler.Boiler"
+                FLUID_TANK -> "create.fluids.FluidTank"
                 PUMP -> "create.actuators.Pump"
                 CLUTCH -> "create.actuators.Clutch"
             }
@@ -715,6 +739,10 @@ internal interface RotationControllerAccess : CreateDeviceEndpoint {
     fun targetSpeed(): Int
 
     fun setTargetSpeed(speed: Int): Int
+}
+
+internal interface FluidTankAccess : CreateDeviceEndpoint {
+    fun state(): FluidTankState
 }
 
 internal interface BoilerAccess : CreateDeviceEndpoint {
@@ -798,6 +826,35 @@ private class StockTickerEndpoint(
     }
 }
 
+private class FluidTankEndpoint(
+    level: ServerLevel,
+    position: BlockPos,
+    entity: FluidTankBlockEntity,
+    reachable: () -> Boolean,
+) : BoundCreateEndpoint<FluidTankBlockEntity>(level, position, entity, reachable),
+    FluidTankAccess {
+    private val originalSize = entity.totalTankSize
+    private val originalWidth = entity.width
+    private val originalHeight = entity.height
+
+    override fun valid(): Boolean =
+        super.valid() && entity.isController && !entity.boiler.isActive &&
+            entity.totalTankSize == originalSize && entity.width == originalWidth && entity.height == originalHeight &&
+            level.getCapability(Capabilities.FluidHandler.BLOCK, entity.blockPos, null) != null
+
+    override fun state(): FluidTankState {
+        val handler = checkNotNull(level.getCapability(Capabilities.FluidHandler.BLOCK, entity.blockPos, null))
+        val fluid = handler.getFluidInTank(0)
+        return FluidTankState(
+            level.gameTime,
+            if (fluid.isEmpty) "" else BuiltInRegistries.FLUID.getKey(fluid.fluid).toString(),
+            fluid.amount,
+            handler.getTankCapacity(0),
+            originalSize,
+        )
+    }
+}
+
 private class BoilerEndpoint(
     level: ServerLevel,
     position: BlockPos,
@@ -852,11 +909,16 @@ internal fun passiveBoilerStatus(
 private fun boilerController(
     level: ServerLevel,
     tank: FluidTankBlockEntity,
+): FluidTankBlockEntity? = fluidTankController(level, tank)?.takeIf { it.boiler.isActive }
+
+private fun fluidTankController(
+    level: ServerLevel,
+    tank: FluidTankBlockEntity,
 ): FluidTankBlockEntity? {
     val controllerPosition = tank.getController()
     if (!level.hasChunkAt(controllerPosition)) return null
     val controller = level.getBlockEntity(controllerPosition) as? FluidTankBlockEntity ?: return null
-    return controller.takeIf { it.isController && it.boiler.isActive && tank.getControllerBE() === it }
+    return controller.takeIf { it.isController && tank.getControllerBE() === it }
 }
 
 private class TickerStockEntry(

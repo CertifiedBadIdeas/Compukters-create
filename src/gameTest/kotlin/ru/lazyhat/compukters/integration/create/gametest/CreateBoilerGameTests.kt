@@ -24,7 +24,6 @@ import ru.lazyhat.compukters.impl.registry.CompuktersRegistry
 import ru.lazyhat.compukters.minecraft.peripheral.ConfiguratorOverlayServer
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorContext
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorMode
-import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorSaveResult
 import ru.lazyhat.compukters.minecraft.peripheral.PeripheralConfiguratorServer
 
 @PrefixGameTestTemplate(false)
@@ -144,12 +143,8 @@ object CreateBoilerGameTests {
                 "Hovering a non-controller segment must select the boiler",
             )
             helper.assertTrue(boiler.single().network != null, "All segments must display their controller network")
-            PeripheralNetworkGameTestFixtures.assertNotPeripheral(helper, helper.absolutePos(plainTank))
-            val rejected = CreatePeripheralGameTests.nameDevice(helper, plainTank, "plain", expectSuccess = false)
-            helper.assertTrue(
-                rejected == PeripheralConfiguratorSaveResult.INVALID_TARGET,
-                "ordinary non-boiler tank was exposed as a peripheral: $rejected",
-            )
+            PeripheralNetworkGameTestFixtures.bind(helper, helper.absolutePos(computer), helper.absolutePos(plainTank))
+            CreatePeripheralGameTests.nameDevice(helper, plainTank, "plain")
         }
         guest.prepare(sequence, BOILER_SOURCE)
         guest.awaitMarker(sequence, "boiler-acquired")

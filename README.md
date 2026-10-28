@@ -1,6 +1,6 @@
 # Compukters: Create
 
-Independent kinetics, programmable pumps and clutches, Stock Ticker logistics and boiler integration for Minecraft 1.21.1.
+Independent kinetics, programmable pumps and clutches, Stock Ticker logistics boiler and fluid tank integration for Minecraft 1.21.1.
 
 Installation, upstream versions, Guest Kotlin examples, device lifetime and development commands are maintained in the
 [canonical Wiki guide](https://certifiedbadideas.github.io/Compukters/CREATE/).
@@ -26,3 +26,12 @@ There is no automatic fallback between source and released dependencies.
 
 Only pushed version tags publish this addon. Its release contains the production JAR, named development JAR,
 Guest API bundle and SHA256 inventory. Ordinary commits produce no GitHub Releases.
+
+## Fluid tank observations (API 2.2)
+
+`create.fluids.FluidTank.named("fuel").state()` returns the native server tick, fluid registry ID
+(empty string when empty), amount and capacity in millibuckets, and multiblock block count.
+Every segment resolves the same controller. Capacity comes from the native fluid capability,
+including compatible tank subclasses. Active boilers retain the separate `create.boiler.Boiler`
+contract. Reshaping, replacement, unloading or loss of reachability invalidates an old handle.
+This API reads stock; it never fills tanks, loads chunks or pumps fluid.

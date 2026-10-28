@@ -202,6 +202,7 @@ object CreateGameTestRegistration {
     fun register(event: RegisterGameTestsEvent) {
         event.register(CreatePeripheralGameTests::class.java)
         event.register(CreateBoilerGameTests::class.java)
+        event.register(CreateFluidTankGameTests::class.java)
         event.register(CreateActuatorGameTests::class.java)
     }
 }
