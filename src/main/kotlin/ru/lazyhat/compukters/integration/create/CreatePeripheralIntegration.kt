@@ -305,7 +305,8 @@ internal class CreateHostState(
     private var nextSnapshotHandle = 1
     private var resourcesUsed = false
 
-    override fun acquireSpeedometer(argument0: Int): AddonCallResult<Int> = acquire(argument0, PeripheralKind.SPEEDOMETER)
+    // Host-state test helpers; Guest acquisition is owned by the generated typed provider.
+    internal fun acquireSpeedometer(argument0: Int): AddonCallResult<Int> = acquire(argument0, PeripheralKind.SPEEDOMETER)
 
     override fun speed(argument0: Int): AddonCallResult<Float> = withEndpoint<SpeedometerAccess, Float>(argument0) { it.speed() }
 
@@ -323,7 +324,7 @@ internal class CreateHostState(
         }
     }
 
-    override fun acquireStressometer(argument0: Int): AddonCallResult<Int> = acquire(argument0, PeripheralKind.STRESSOMETER)
+    internal fun acquireStressometer(argument0: Int): AddonCallResult<Int> = acquire(argument0, PeripheralKind.STRESSOMETER)
 
     override fun stress(argument0: Int): AddonCallResult<Float> = withEndpoint<StressometerAccess, Float>(argument0) { it.stress() }
 
@@ -346,7 +347,7 @@ internal class CreateHostState(
         }
     }
 
-    override fun acquireRotationController(argument0: Int): AddonCallResult<Int> = acquire(argument0, PeripheralKind.ROTATION_CONTROLLER)
+    internal fun acquireRotationController(argument0: Int): AddonCallResult<Int> = acquire(argument0, PeripheralKind.ROTATION_CONTROLLER)
 
     override fun targetSpeed(argument0: Int): AddonCallResult<Int> =
         withEndpoint<RotationControllerAccess, Int>(argument0) { it.targetSpeed() }
@@ -356,20 +357,20 @@ internal class CreateHostState(
         argument1: Int,
     ): AddonCallResult<Int> = withEndpoint<RotationControllerAccess, Int>(argument0) { it.setTargetSpeed(argument1) }
 
-    override fun acquireRotationControllerByName(argument0: String): AddonCallResult<Int> =
+    internal fun acquireRotationControllerByName(argument0: String): AddonCallResult<Int> =
         acquireNamed(argument0, PeripheralKind.ROTATION_CONTROLLER)
 
-    override fun acquireSpeedometerByName(argument0: String): AddonCallResult<Int> = acquireNamed(argument0, PeripheralKind.SPEEDOMETER)
+    internal fun acquireSpeedometerByName(argument0: String): AddonCallResult<Int> = acquireNamed(argument0, PeripheralKind.SPEEDOMETER)
 
-    override fun acquireStressometerByName(argument0: String): AddonCallResult<Int> = acquireNamed(argument0, PeripheralKind.STRESSOMETER)
+    internal fun acquireStressometerByName(argument0: String): AddonCallResult<Int> = acquireNamed(argument0, PeripheralKind.STRESSOMETER)
 
-    override fun acquireStockTicker(argument0: Int): AddonCallResult<Int> = acquire(argument0, PeripheralKind.STOCK_TICKER)
+    internal fun acquireStockTicker(argument0: Int): AddonCallResult<Int> = acquire(argument0, PeripheralKind.STOCK_TICKER)
 
-    override fun acquireStockTickerByName(argument0: String): AddonCallResult<Int> = acquireNamed(argument0, PeripheralKind.STOCK_TICKER)
+    internal fun acquireStockTickerByName(argument0: String): AddonCallResult<Int> = acquireNamed(argument0, PeripheralKind.STOCK_TICKER)
 
-    override fun acquire(argument0: Int): AddonCallResult<Int> = acquire(argument0, PeripheralKind.BOILER)
+    internal fun acquire(argument0: Int): AddonCallResult<Int> = acquire(argument0, PeripheralKind.BOILER)
 
-    override fun acquireByName(argument0: String): AddonCallResult<Int> = acquireNamed(argument0, PeripheralKind.BOILER)
+    internal fun acquireByName(argument0: String): AddonCallResult<Int> = acquireNamed(argument0, PeripheralKind.BOILER)
 
     override fun waterSupply(argument0: Int): AddonCallResult<Float> = withEndpoint<BoilerAccess, Float>(argument0) { it.waterSupply() }
 
@@ -381,9 +382,9 @@ internal class CreateHostState(
 
     override fun isPassive(argument0: Int): AddonCallResult<Boolean> = withEndpoint<BoilerAccess, Boolean>(argument0) { it.isPassive() }
 
-    override fun fluidTankAcquire(argument0: Int): AddonCallResult<Int> = acquire(argument0, PeripheralKind.FLUID_TANK)
+    internal fun fluidTankAcquire(argument0: Int): AddonCallResult<Int> = acquire(argument0, PeripheralKind.FLUID_TANK)
 
-    override fun fluidTankAcquireByName(argument0: String): AddonCallResult<Int> = acquireNamed(argument0, PeripheralKind.FLUID_TANK)
+    internal fun fluidTankAcquireByName(argument0: String): AddonCallResult<Int> = acquireNamed(argument0, PeripheralKind.FLUID_TANK)
 
     override fun fluidTankState(argument0: Int): AddonCallResult<FluidTankState> =
         withEndpoint<FluidTankAccess, FluidTankState>(argument0) { it.state() }

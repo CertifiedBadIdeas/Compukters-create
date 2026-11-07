@@ -8,6 +8,7 @@ package ru.lazyhat.compukters.integration.create
 
 import com.simibubi.create.content.fluids.tank.BoilerData
 import create.CreateAddonContract
+import ru.lazyhat.compukters.api.addon.AddonCallResult
 import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
 import ru.lazyhat.compukters.api.addon.ProgramAddonRequest
@@ -48,22 +49,21 @@ class BoilerHostStateTest {
     @Test
     fun `side and named boiler handles report Create readings`() {
         val boiler = FakeBoiler(20f, 2, 8, 2, false)
-        val host =
-            CreateAddonContract.host(
-                CreateHostState(
-                    resolveSide = { side, kind -> boiler.takeIf { side == 2 && kind == PeripheralKind.BOILER } },
-                    resolveName = { name, kind ->
-                        if (name == "main_boiler" && kind == PeripheralKind.BOILER) {
-                            CreateNamedResolution.Found(boiler)
-                        } else {
-                            CreateNamedResolution.Failed(HostFailureKind.UNAVAILABLE, "missing")
-                        }
-                    },
-                ),
+        val state =
+            CreateHostState(
+                resolveSide = { side, kind -> boiler.takeIf { side == 2 && kind == PeripheralKind.BOILER } },
+                resolveName = { name, kind ->
+                    if (name == "main_boiler" && kind == PeripheralKind.BOILER) {
+                        CreateNamedResolution.Found(boiler)
+                    } else {
+                        CreateNamedResolution.Failed(HostFailureKind.UNAVAILABLE, "missing")
+                    }
+                },
             )
+        val host = CreateAddonContract.host(state)
 
-        val handle = host.call(23, VmValue.I32(2)).intValue()
-        assertEquals(handle, host.call(24, VmValue.StringValue("main_boiler")).intValue())
+        val handle = state.acquire(2).handleValue()
+        assertEquals(handle, state.acquireByName("main_boiler").handleValue())
         assertEquals(HostResponse.FloatSuccess(20f), host.call(28, VmValue.I32(handle)))
         assertEquals(HostResponse.IntSuccess(2), host.call(29, VmValue.I32(handle)))
         assertEquals(HostResponse.IntSuccess(8), host.call(25, VmValue.I32(handle)))
@@ -87,15 +87,13 @@ class BoilerHostStateTest {
         val sameTankIdentity = Any()
         val old = FakeBoiler(20f, 2, 10, 2, false, sameTankIdentity)
         var current = old
-        val host =
-            CreateAddonContract.host(
-                CreateHostState { _, kind -> current.takeIf { kind == PeripheralKind.BOILER } },
-            )
-        val oldHandle = host.call(23, VmValue.I32(0)).intValue()
+        val state = CreateHostState { _, kind -> current.takeIf { kind == PeripheralKind.BOILER } }
+        val host = CreateAddonContract.host(state)
+        val oldHandle = state.acquire(0).handleValue()
         old.connected = false
         current = FakeBoiler(30f, 3, 12, 3, false, sameTankIdentity)
 
-        val newHandle = host.call(23, VmValue.I32(0)).intValue()
+        val newHandle = state.acquire(0).handleValue()
         assertNotEquals(oldHandle, newHandle)
         assertEquals(HostFailureKind.UNAVAILABLE, assertIs<HostResponse.Failure>(host.call(28, VmValue.I32(oldHandle))).kind)
         assertEquals(HostResponse.FloatSuccess(30f), host.call(28, VmValue.I32(newHandle)))
@@ -105,14 +103,12 @@ class BoilerHostStateTest {
     fun `missing and stale boilers fail without returning readings`() {
         val boiler = FakeBoiler(10f, 1, 6, 1, false)
         var present = false
-        val host =
-            CreateAddonContract.host(
-                CreateHostState { _, kind -> boiler.takeIf { present && kind == PeripheralKind.BOILER } },
-            )
-        assertEquals(HostFailureKind.UNAVAILABLE, assertIs<HostResponse.Failure>(host.call(23, VmValue.I32(0))).kind)
+        val state = CreateHostState { _, kind -> boiler.takeIf { present && kind == PeripheralKind.BOILER } }
+        val host = CreateAddonContract.host(state)
+        assertEquals(HostFailureKind.UNAVAILABLE, assertIs<AddonCallResult.Failed>(state.acquire(0)).kind)
 
         present = true
-        val handle = host.call(23, VmValue.I32(0)).intValue()
+        val handle = state.acquire(0).handleValue()
         boiler.connected = false
         val failure = assertIs<HostResponse.Failure>(host.call(27, VmValue.I32(handle)))
         assertEquals(HostFailureKind.INPUT_OUTPUT, failure.kind)
@@ -126,8 +122,6 @@ class BoilerHostStateTest {
         assertIs<ProgramAddonDispatch.Completed>(
             dispatch(ProgramAddonRequest(VmHostRequestIdentity(1, nextRequestId++), CREATE, operation, values.toList())),
         ).response
-
-    private fun HostResponse.intValue(): Int = assertIs<HostResponse.IntSuccess>(this).value
 
     private class FakeBoiler(
         var water: Float,

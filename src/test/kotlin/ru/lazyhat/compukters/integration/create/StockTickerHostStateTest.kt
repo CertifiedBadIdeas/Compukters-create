@@ -43,8 +43,9 @@ class StockTickerHostStateTest {
                     FakeItem("minecraft:book", "Named Book", 3),
                 ),
             )
-        val host = host(ticker)
-        val device = host.call(13, VmValue.I32(0)).intValue()
+        val state = stateFor(ticker)
+        val host = CreateAddonContract.host(state)
+        val device = state.acquireStockTicker(0).handleValue()
         val snapshot = host.call(16, VmValue.I32(device)).intValue()
 
         assertEquals(
@@ -80,9 +81,10 @@ class StockTickerHostStateTest {
         val plain = FakeItem("minecraft:book", "Book", 12)
         val named = FakeItem("minecraft:book", "Named Book", 3)
         val ticker = FakeTicker(mutableListOf(plain, named))
-        val host = host(ticker)
+        val state = stateFor(ticker)
+        val host = CreateAddonContract.host(state)
 
-        val device = host.call(13, VmValue.I32(0)).intValue()
+        val device = state.acquireStockTicker(0).handleValue()
         val snapshot = host.call(16, VmValue.I32(device)).intValue()
         assertEquals(HostResponse.IntSuccess(2), host.call(20, VmValue.I32(snapshot)))
         assertEquals(HostResponse.StringSuccess("minecraft:book"), host.call(19, VmValue.I32(snapshot), VmValue.I32(1)))
@@ -115,8 +117,9 @@ class StockTickerHostStateTest {
     fun `snapshot and request limits reject invalid work without sending an order`() {
         val item = FakeItem("minecraft:iron_ingot", "Iron Ingot", 10)
         val ticker = FakeTicker(mutableListOf(item))
-        val host = host(ticker)
-        val device = host.call(13, VmValue.I32(0)).intValue()
+        val state = stateFor(ticker)
+        val host = CreateAddonContract.host(state)
+        val device = state.acquireStockTicker(0).handleValue()
         val snapshot = host.call(16, VmValue.I32(device)).intValue()
 
         listOf(-1, 1).forEach { index ->
@@ -148,8 +151,9 @@ class StockTickerHostStateTest {
         assertEquals(HostFailureKind.UNAVAILABLE, assertIs<HostResponse.Failure>(host.call(20, VmValue.I32(snapshot))).kind)
         assertEquals(HostResponse.IntSuccess(1), host.call(20, VmValue.I32(host.call(16, VmValue.I32(device)).intValue())))
 
-        val oversized = host(FakeTicker(MutableList(257) { FakeItem("minecraft:stone", "Stone", 1) }))
-        val oversizedDevice = oversized.call(13, VmValue.I32(0)).intValue()
+        val oversizedState = stateFor(FakeTicker(MutableList(257) { FakeItem("minecraft:stone", "Stone", 1) }))
+        val oversized = CreateAddonContract.host(oversizedState)
+        val oversizedDevice = oversizedState.acquireStockTicker(0).handleValue()
         assertEquals(HostFailureKind.UNAVAILABLE, assertIs<HostResponse.Failure>(oversized.call(16, VmValue.I32(oversizedDevice))).kind)
     }
 
@@ -170,23 +174,21 @@ class StockTickerHostStateTest {
                 },
             )
         val host = CreateAddonContract.host(state)
-        val oldDevice = host.call(14, VmValue.StringValue("stock")).intValue()
+        val oldDevice = state.acquireStockTickerByName("stock").handleValue()
         val oldSnapshot = host.call(16, VmValue.I32(oldDevice)).intValue()
 
         connected = false
         assertEquals(HostFailureKind.INPUT_OUTPUT, assertIs<HostResponse.Failure>(host.call(20, VmValue.I32(oldSnapshot))).kind)
         connected = true
         current = FakeTicker(mutableListOf(FakeItem("minecraft:gold_ingot", "Gold Ingot", 4)))
-        val newDevice = host.call(14, VmValue.StringValue("stock")).intValue()
+        val newDevice = state.acquireStockTickerByName("stock").handleValue()
         assertTrue(newDevice != oldDevice)
         assertEquals(HostFailureKind.UNAVAILABLE, assertIs<HostResponse.Failure>(host.call(20, VmValue.I32(oldSnapshot))).kind)
         assertEquals(HostResponse.IntSuccess(1), host.call(20, VmValue.I32(host.call(16, VmValue.I32(newDevice)).intValue())))
     }
 
-    private fun host(ticker: FakeTicker): ProgramAddonHost =
-        CreateAddonContract.host(
-            CreateHostState { side, kind -> ticker.takeIf { side == 0 && kind == PeripheralKind.STOCK_TICKER } },
-        )
+    private fun stateFor(ticker: FakeTicker): CreateHostState =
+        CreateHostState { side, kind -> ticker.takeIf { side == 0 && kind == PeripheralKind.STOCK_TICKER } }
 
     private fun ProgramAddonHost.call(
         operation: Int,

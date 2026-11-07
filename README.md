@@ -35,3 +35,15 @@ Every segment resolves the same controller. Capacity comes from the native fluid
 including compatible tank subclasses. Active boilers retain the separate `create.boiler.Boiler`
 contract. Reshaping, replacement, unloading or loss of reachability invalidates an old handle.
 This API reads stock; it never fills tanks, loads chunks or pumps fluid.
+
+## Declarative Guest contracts
+
+Guest API declarations live in `src/compuktersAddon/contracts`. The SDK generates the actual Guest Kotlin under
+`build/generated/sources/compuktersGuest/kotlin` and packages those sources with the executable `.cagb` image.
+Run `generateCompuktersGuestSources` to inspect the result. Check in `src/compuktersAddon/addon.lock` as ABI history;
+only `updateCompuktersAddonAbiLock` changes selectors/tombstones after an intentional contract edit.
+Unit-returning `@GuestCommand` methods get ordinary calls and batch command factories from the same declaration.
+The generated host validates declared parameter constraints and derives command eligibility.
+See the [SDK authoring guide](https://github.com/CertifiedBadIdeas/Compukters/blob/dev/docs/developers/addon-development.md).
+
+API 3.0 requires the explicit starting index in `StockSnapshot.findItem(itemId, fromIndex)`; use `0` to search the entire snapshot.

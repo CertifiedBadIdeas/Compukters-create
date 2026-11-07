@@ -19,6 +19,7 @@
 package ru.lazyhat.compukters.integration.create
 
 import create.CreateAddonContract
+import ru.lazyhat.compukters.api.addon.AddonCallResult
 import ru.lazyhat.compukters.api.addon.ProgramAddonCompletion
 import ru.lazyhat.compukters.api.addon.ProgramAddonDispatch
 import ru.lazyhat.compukters.api.addon.ProgramAddonHost
@@ -86,10 +87,10 @@ class CreateHostStateTest {
             )
         val host = CreateAddonContract.host(state)
 
-        val sideHandle = host.completed(0, 0).intValue()
-        assertEquals(sideHandle, host.completed(11, "wheel").intValue())
-        assertEquals(HostResponse.FloatSuccess(4f), host.completed(4, host.completed(12, "load").intValue()))
-        val controllerHandle = host.completed(10, "governor").intValue()
+        val sideHandle = state.acquireSpeedometer(0).handleValue()
+        assertEquals(sideHandle, state.acquireSpeedometerByName("wheel").handleValue())
+        assertEquals(HostResponse.FloatSuccess(4f), host.completed(4, state.acquireStressometerByName("load").handleValue()))
+        val controllerHandle = state.acquireRotationControllerByName("governor").handleValue()
         assertEquals(HostResponse.IntSuccess(32), host.completed(9, controllerHandle, 32))
     }
 
@@ -107,10 +108,8 @@ class CreateHostStateTest {
                 resolveSide = { _, _ -> null },
                 resolveName = { name, _ -> checkNotNull(failures[name]) },
             )
-        val host = CreateAddonContract.host(state)
-
         failures.forEach { (name, failure) ->
-            assertEquals(HostResponse.Failure(failure.kind, failure.detail), host.completed(11, name))
+            assertEquals(AddonCallResult.Failed(failure.kind, failure.detail), state.acquireSpeedometerByName(name))
         }
     }
 
@@ -120,8 +119,8 @@ class CreateHostStateTest {
         val state = CreateHostState { side, kind -> if (side == 0 && kind == PeripheralKind.SPEEDOMETER) speedometer else null }
         val host = CreateAddonContract.host(state)
 
-        val firstHandle = host.completed(0, 0).intValue()
-        val secondHandle = host.completed(0, 0).intValue()
+        val firstHandle = state.acquireSpeedometer(0).handleValue()
+        val secondHandle = state.acquireSpeedometer(0).handleValue()
         assertEquals(firstHandle, secondHandle)
         assertEquals(HostResponse.FloatSuccess(16f), host.completed(1, firstHandle))
 
@@ -150,8 +149,8 @@ class CreateHostStateTest {
                 }
             }
         val host = CreateAddonContract.host(state)
-        val stressHandle = host.completed(3, 2).intValue()
-        val controllerHandle = host.completed(7, 1).intValue()
+        val stressHandle = state.acquireStressometer(2).handleValue()
+        val controllerHandle = state.acquireRotationController(1).handleValue()
 
         assertEquals(HostResponse.FloatSuccess(4f), host.completed(4, stressHandle))
         assertEquals(HostResponse.FloatSuccess(8f), host.completed(5, stressHandle))
@@ -172,7 +171,7 @@ class CreateHostStateTest {
         var current = first
         val state = CreateHostState { _, kind -> if (kind == PeripheralKind.SPEEDOMETER) current else null }
         val host = CreateAddonContract.host(state)
-        val oldHandle = host.completed(0, 0).intValue()
+        val oldHandle = state.acquireSpeedometer(0).handleValue()
         val wait = request(2, oldHandle, requestId = 12)
         assertEquals(ProgramAddonDispatch.Pending, host.dispatch(wait))
 
@@ -185,7 +184,7 @@ class CreateHostStateTest {
             failure,
             assertIs<HostResponse.Failure>(host.poll(1).single().response),
         )
-        val newHandle = host.completed(0, 0).intValue()
+        val newHandle = state.acquireSpeedometer(0).handleValue()
 
         assertTrue(newHandle != oldHandle)
         assertEquals(HostResponse.FloatSuccess(32f), host.completed(1, newHandle))
@@ -199,18 +198,18 @@ class CreateHostStateTest {
         val host = CreateAddonContract.host(state)
 
         assertEquals(
-            HostResponse.Failure(HostFailureKind.UNAVAILABLE, "No matching Create kinetic device is attached on that side"),
-            host.completed(0, 3),
+            AddonCallResult.Failed(HostFailureKind.UNAVAILABLE, "No matching Create kinetic device is attached on that side"),
+            state.acquireSpeedometer(3),
         )
         assertEquals(
-            HostResponse.Failure(HostFailureKind.UNAVAILABLE, "No matching Create kinetic device is attached on that side"),
-            host.completed(0, 2),
+            AddonCallResult.Failed(HostFailureKind.UNAVAILABLE, "No matching Create kinetic device is attached on that side"),
+            state.acquireSpeedometer(2),
         )
         assertEquals(
             HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Create kinetic device handle is unavailable"),
             host.completed(1, 99),
         )
-        assertEquals(HostResponse.FloatSuccess(4f), host.completed(4, host.completed(3, 3).intValue()))
+        assertEquals(HostResponse.FloatSuccess(4f), host.completed(4, state.acquireStressometer(3).handleValue()))
     }
 
     @Test
@@ -230,7 +229,7 @@ class CreateHostStateTest {
         val speedometer = FakeSpeedometer(Float.POSITIVE_INFINITY)
         val state = CreateHostState { _, kind -> if (kind == PeripheralKind.SPEEDOMETER) speedometer else null }
         val host = CreateAddonContract.host(state)
-        val handle = host.completed(0, 0).intValue()
+        val handle = state.acquireSpeedometer(0).handleValue()
 
         assertEquals(Float.POSITIVE_INFINITY.toBits(), assertIs<HostResponse.FloatSuccess>(host.completed(1, handle)).value.toBits())
         speedometer.speed = Float.NaN
@@ -246,17 +245,17 @@ class CreateHostStateTest {
     fun `handle and wait limits are bounded and reset cancels retained state`() {
         val state = CreateHostState { _, kind -> if (kind == PeripheralKind.SPEEDOMETER) FakeSpeedometer(0f) else null }
         val host = CreateAddonContract.host(state)
-        repeat(64) { assertIs<HostResponse.IntSuccess>(host.completed(0, 0)) }
+        repeat(64) { assertIs<AddonCallResult.Completed<Int>>(state.acquireSpeedometer(0)) }
         assertEquals(
-            HostResponse.Failure(HostFailureKind.UNAVAILABLE, "Create kinetic device handle limit was reached"),
-            host.completed(0, 0),
+            AddonCallResult.Failed(HostFailureKind.UNAVAILABLE, "Create kinetic device handle limit was reached"),
+            state.acquireSpeedometer(0),
         )
 
         host.reset()
         val speedometer = FakeSpeedometer(0f)
         val waiting = CreateHostState { _, kind -> if (kind == PeripheralKind.SPEEDOMETER) speedometer else null }
         val waitingHost = CreateAddonContract.host(waiting)
-        val handle = waitingHost.completed(0, 0).intValue()
+        val handle = waiting.acquireSpeedometer(0).handleValue()
         repeat(64) { requestId ->
             assertEquals(ProgramAddonDispatch.Pending, waitingHost.dispatch(request(2, handle, requestId = 1_000L + requestId)))
         }
@@ -367,28 +366,11 @@ class CreateHostStateTest {
             ),
         ).response
 
-    private fun ProgramAddonHost.completed(
-        operation: Int,
-        argument: String,
-    ): HostResponse =
-        assertIs<ProgramAddonDispatch.Completed>(
-            dispatch(
-                ProgramAddonRequest(
-                    VmHostRequestIdentity(1, nextRequestId++),
-                    CREATE,
-                    operation,
-                    listOf(VmValue.StringValue(argument)),
-                ),
-            ),
-        ).response
-
     private fun request(
         operation: Int,
         argument: Int,
         requestId: Long,
     ) = ProgramAddonRequest(VmHostRequestIdentity(1, requestId), CREATE, operation, listOf(VmValue.I32(argument)))
-
-    private fun HostResponse.intValue(): Int = assertIs<HostResponse.IntSuccess>(this).value
 
     private class FakeSpeedometer(
         var speed: Float,
