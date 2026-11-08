@@ -8,31 +8,30 @@ package create.logistics
 
 import ru.lazyhat.compukters.api.contracts.GuestCall
 import ru.lazyhat.compukters.api.contracts.GuestDevice
-import ru.lazyhat.compukters.api.contracts.GuestRead
 import ru.lazyhat.compukters.api.contracts.GuestResource
 
 @GuestDevice("create:stock_ticker", bindings = "LogisticsBindings")
 interface StockTicker {
-    @GuestRead(binding = "snapshot")
+    @GuestCall(binding = "snapshot")
     fun snapshot(): StockSnapshot
 }
 
 @GuestResource(bindings = "LogisticsBindings")
 interface StockSnapshot {
-    @GuestRead(binding = "snapshotSize")
+    @GuestCall(binding = "snapshotSize")
     fun size(): Int
 
-    @GuestRead(binding = "snapshotItemId")
+    @GuestCall(binding = "snapshotItemId")
     fun itemId(index: Int): String
 
-    @GuestRead(binding = "snapshotDisplayName")
+    @GuestCall(binding = "snapshotDisplayName")
     fun displayName(index: Int): String
 
-    @GuestRead(binding = "snapshotCount")
+    @GuestCall(binding = "snapshotCount")
     fun count(index: Int): Int
 
     /** Returns the next exact item-ID match at or after [fromIndex], or -1 when none remains. */
-    @GuestRead(binding = "findItem")
+    @GuestCall(binding = "findItem")
     fun findItem(
         itemId: String,
         fromIndex: Int,

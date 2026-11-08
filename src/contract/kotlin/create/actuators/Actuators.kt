@@ -20,12 +20,11 @@ package create.actuators
 
 import ru.lazyhat.compukters.api.contracts.GuestCall
 import ru.lazyhat.compukters.api.contracts.GuestDevice
-import ru.lazyhat.compukters.api.contracts.GuestRead
 
 /** A programmable mechanical pump; reversing flow does not reverse its kinetic input. */
 @GuestDevice("create:pump", bindings = "ActuatorBindings")
 interface Pump {
-    @GuestRead(binding = "pumpReversed")
+    @GuestCall(binding = "pumpReversed")
     fun reversed(): Boolean
 
     @GuestCall(binding = "setPumpReversed")
@@ -35,7 +34,7 @@ interface Pump {
 /** A normally disengaged programmable clutch. Closing the final handle disengages it. */
 @GuestDevice("create:clutch", bindings = "ActuatorBindings")
 interface Clutch {
-    @GuestRead(binding = "clutchConnected")
+    @GuestCall(binding = "clutchConnected")
     fun connected(): Boolean
 
     @GuestCall(binding = "setClutchConnected")
